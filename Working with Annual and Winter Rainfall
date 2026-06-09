@@ -1,6 +1,7 @@
 
 # Workflow for working with rainfall data:
 # Create annual rainfall totals for each station across years
+# Assign totals to sites and average for 5 year windows for each sampling site
 ## Step 1 adds up daily rainfall to get annual rainfall totals for each station
 ## Step 2 use look-up table so each site–station pair is easy to match annual rainfall totals
 ## Step 3 calculate annual rainfall for each site, averaging the two stations when available
@@ -36,14 +37,14 @@ write.csv(site_year_rain, "site_year_rain.csv", row.names = FALSE)
 ```
 
 ```{r}
-#Double check site_year_rain manually
-#For site_code AA09 for year 2000:
-#Step 1. Check which stations belong to AA09 (station1 = 76200 and station2 = 61200)
+# Double check site_year_rain manually
+# For site_code AA09 for year 2000:
+# Step 1. Check which stations belong to AA09 (station1 = 76200 and station2 = 61200)
 
 site_station_lookup %>%
   filter(site_code == "AA09")
 
-#Step 2. Check the annual rainfall totals for those two stations in 2000 (station 61200 should be 26.4 and station 76200 should be 23.4)
+# Step 2. Check the annual rainfall totals for those two stations in 2000 (station 61200 should be 26.4 and station 76200 should be 23.4)
 
 station_year_rain %>%
   filter(station_id %in% c("76200", "61200"), year == 2000)
@@ -59,7 +60,7 @@ site_year_rain %>%
 ```
 
 ```{r}
-# Create filtered rainfall dataset that contains only the station IDs actually used in lookup table for easier use
+# Create filtered rainfall dataset that contains only the station IDs actually used in lookup table for easier use instead of whole rainfall dataset
 # Going forward: updated_rainfall = full rainfall dataset and
 # rain_used_stations = only the stations that appear in the lookup table
 
@@ -103,10 +104,9 @@ rain_long_used_cm <- rain_long_cm %>%
 ```
 
 ```{r}
-# Create 5 year averages for sampling sites and 
-# 5-year average by site code
-# Sampling Year windows: 
-# Year 2000 (do not have the previous 4 years so ommit this sampling year)
+# Create 5 year averages (sample year windows) of the annual, cumulative rainfall data for sampling sites
+# For sampling Year 2000 we do not have the previous 4 years worth of rainfall data so ommit this sampling year
+# Sampling Year Windows: 
 # Year 2005: 2001-2005
 # Year 2010: 2006-2010
 # Year 2015: 2011-2015
@@ -114,8 +114,8 @@ rain_long_used_cm <- rain_long_cm %>%
 ```
 
 ```{r}
-#Testing 2005 Window: 2001-2005
-#Recreate annual rainfall by station using new dataset
+# Testing 2005 Window: 2001-2005
+# Recreate annual rainfall by station using new dataset
 annual_rain_by_station <- rain_long_used_cm %>%
   mutate(year = year(Date)) %>%
   group_by(station_id, year) %>%
@@ -137,6 +137,7 @@ annual_rain_by_site <- site_station_long %>%
 ```
 
 ```{r}
+# Creating averages for 4 sample year windows 
 # 2005 year window
 
 site_rain_2005_window <- annual_rain_by_site %>%
@@ -150,7 +151,7 @@ site_rain_2005_window <- annual_rain_by_site %>%
 ```
 
 ```{r}
-#Year 2010 Window: 2006-2010
+# Year 2010 Window: 2006-2010
 site_rain_2010_window <- annual_rain_by_site %>%
   filter(year %in% 2006:2010) %>%
   group_by(site_code) %>%
@@ -162,7 +163,7 @@ site_rain_2010_window <- annual_rain_by_site %>%
 ```
 
 ```{r}
-#Year 2015 Window: 2011-2015
+# Year 2015 Window: 2011-2015
 site_rain_2015_window<- annual_rain_by_site %>%
    filter(year %in% 2011:2015) %>%
   group_by(site_code) %>%
@@ -206,8 +207,9 @@ write.csv(site_annual_windows, "site_annual_windows.csv", row.names = FALSE)
 ```
 
 ```{r}
-# Calculating winter averages:
-# Winter rainfall data will be defined as October-April of the following year to look into the moisture period that could influence stinknet germination, establishment, and growth
+# Calculating Annual Winter Averages:
+# Winter rainfall data will be defined as October of the previous year to April of the following year to look into 
+# the moisture period that could influence stinknet germination, establishment, and growth
 # Winter/growing-season rainfall year = October of the previous year through April of the focal year
 # Winter 2005 = October 2004–April 2005
 # Ommitting year 2000
@@ -215,8 +217,8 @@ write.csv(site_annual_windows, "site_annual_windows.csv", row.names = FALSE)
 
 ```{r}
 # Workflow: 
-# Step 1. Calculate winter rainfall value for each site and year
-# Step 2. Average winter values across the same 5 windows windows for sites
+# Step 1. Calculate winter rainfall value for each site and each year
+# Step 2. Average winter values across the same 5 sample windows for sites
 
 # Step 1a: add month and year
 rain_winter_prep <- rain_long_used_cm %>%
@@ -376,7 +378,7 @@ site_annual_windows_wide <- site_annual_windows %>%
 ```
 
 ```{r}
-# 1.Quality check window summaries for annual window and winter window averages
+# 1. Quality check window summaries for annual window and winter window averages
 ##Check basic summaries
 
 # Annual Windows
