@@ -1,17 +1,9 @@
 ---
 title: "Getting Started with Rainfall"
 author: Valerie Ramirez 
-format: docx
-editor: visual
 ---
 
 ## Quarto
-
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(
-  warning = FALSE,
-  message = FALSE
-)
 ```
 
 ```{r}
@@ -27,7 +19,6 @@ library(ggplot2)
 ```{r}
 #| echo: true
 #Load most recent, cleaned rainfall data 
-#Make sure column 1900 is included in the excel file and CHECK NO blank cells
 updated_rainfall <- read_excel("Vr_Copy of Cleaned_Rainfall (Official).xlsx")
 
 #Inspect structure
