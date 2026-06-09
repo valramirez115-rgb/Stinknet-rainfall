@@ -114,7 +114,6 @@ ggplot(ESCA_rain_merged,
 ```
 
 ```{r}
-#| echo: true
 # Mean Rain by Sample Year and Proportion Invaded
 
 rain_by_year <- ESCA_rain_merged %>%
@@ -125,8 +124,6 @@ rain_by_year <- ESCA_rain_merged %>%
     prop_invaded = mean(ONCPIL, na.rm = TRUE),
     .groups = "drop"
   )
-
-
 
 ```
 
@@ -249,7 +246,6 @@ ggplot(
 ```
 
 ```{r}
-# Individual Sites? Averages? Distribution?
 
 #Scatterplot Annual vs. Winter Rainfall by Site
 ggplot(ESCA_rain_merged,
@@ -382,20 +378,20 @@ write.csv(candidate_sites_combined, "candidate_sites_combined.csv", row.names = 
 ```
 
 ```{r}
-#| echo: true
 # Analysis
 # Wilcox test
 # Annual Window Average Rainfall
 wilcox.test(site_sample_window_avg_rainfall_cm ~ ONCPIL, data = ESCA_rain_merged)
 
 
-##suggests that annual rainfall differs significantly between stinknet present and absent sites at the usual alpha = 0.05 level. There is evidence that the distribution of annual rainfall is not the same for the two groups.
+## Suggests that annual rainfall differs significantly between stinknet present and absent sites at the usual alpha = 0.05 level. There is evidence that the distribution of annual rainfall is not the same for the two groups.
 
 # Winter Window Average Rainfall
 wilcox.test(site_winter_window_rainfall_cm ~ ONCPIL, data = ESCA_rain_merged)
 
 
-## winter rainfall does not differ significantly between stinknet present and absent sites in this dataset, at least based on this Wilcoxon test. There is no strong evidence of a difference between the two groups.
+## Winter rainfall does not differ significantly between stinknet present and absent sites in this dataset, at least based on this Wilcoxon test. 
+## There is no strong evidence of a difference between the two groups.
 
 ## Check means
 ```
