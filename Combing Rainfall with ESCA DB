@@ -64,9 +64,9 @@ write_xlsx(ESCA_rain_merged, "ESCA_rain_merged.xlsx")
 ```
 
 ```{r}
-#| echo: true
 # 3. Start comparing rainfall against stinknet presence and land-use categories
 ## Simple mean and median annual and winter rain 
+
 ESCA_rain_merged %>%
       group_by(sample_year, ONCPIL) %>%
        summarise(
@@ -89,8 +89,8 @@ ESCA_rain_merged %>%
 ```
 
 ```{r}
-#| echo: true
 # Annual Rainfall by Stinknet Presence
+
 ggplot(ESCA_rain_merged,
        aes(x = factor(ONCPIL), y = site_sample_window_avg_rainfall_cm)) +
   geom_boxplot() +
@@ -102,6 +102,7 @@ ggplot(ESCA_rain_merged,
   )
 
 # Winter Rainfall by Stinknet Presence
+
 ggplot(ESCA_rain_merged,
        aes(x = factor(ONCPIL), y = site_winter_window_rainfall_cm)) +
   geom_boxplot() +
