@@ -1,1 +1,978 @@
 
+# Workflow for working with rainfall data:
+# Create annual rainfall totals for each station across years
+## Step 1 adds up daily rainfall to get annual rainfall totals for each station
+## Step 2 use look-up table so each site–station pair is easy to match annual rainfall totals
+## Step 3 calculate annual rainfall for each site, averaging the two stations when available
+## The value is the site’s annual rainfall estimate for that year
+
+
+```{r}
+# Create annual rainfall totals for each station
+
+station_year_rain <- rain_long_cm %>%
+  mutate(year = year(Date)) %>%
+  group_by(station_id, year) %>%
+  summarise(
+    annual_rainfall_cm = sum(rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  ) 
+```
+
+```{r}
+site_year_rain <- site_station_long %>%
+  left_join(station_year_rain, by = "station_id", relationship = "many-to-many") %>%
+  group_by(site_code, year) %>%
+  summarise(
+    site_annual_rainfall_cm = mean(annual_rainfall_cm, na.rm = TRUE),
+    n_stations_used = n(),
+    .groups = "drop"
+  )
+```
+
+```{r}
+# Save Summary Table
+write.csv(site_year_rain, "site_year_rain.csv", row.names = FALSE) 
+```
+
+```{r}
+#Double check site_year_rain manually
+#For site_code AA09 for year 2000:
+#Step 1. Check which stations belong to AA09 (station1 = 76200 and station2 = 61200)
+
+site_station_lookup %>%
+  filter(site_code == "AA09")
+
+#Step 2. Check the annual rainfall totals for those two stations in 2000 (station 61200 should be 26.4 and station 76200 should be 23.4)
+
+station_year_rain %>%
+  filter(station_id %in% c("76200", "61200"), year == 2000)
+
+#Step 3. Manual verification
+
+mean(c(26.4, 23.4)) 
+
+#Step 4. Check Final site-year rainfall value for AA09
+
+site_year_rain %>%
+  filter(site_code == "AA09", year == 2000)
+```
+
+```{r}
+# Create filtered rainfall dataset that contains only the station IDs actually used in lookup table for easier use
+# Going forward: updated_rainfall = full rainfall dataset and
+# rain_used_stations = only the stations that appear in the lookup table
+
+# Step 1. Pull all stations used in the look-up table, should give all station IDS actually assigned to sites
+
+used_stations <- site_station_lookup %>%
+  select(station1, station2) %>%
+  pivot_longer(
+    cols = everything(),
+    values_to = "station_id"
+  ) %>%
+  filter(!is.na(station_id)) %>%
+  distinct(station_id) %>%
+  pull(station_id) %>%
+  as.character()
+
+```
+
+```{r}
+#Step 2.Create new dataset with only those stations using cleaned dataset, should be 133 columns
+rain_used_stations <- updated_rainfall %>%
+  select(Date, all_of(used_stations))
+
+#Step 3. Convert to cm
+rain_used_stations_cm <- rain_clean_cm %>%
+  select(Date, all_of(used_stations))
+
+#Save as CSV files
+write.csv(rain_used_stations, "rain_used_stations.csv", row.names = FALSE)
+write.csv(rain_used_stations_cm, "rain_used_stations_cm.csv", row.names = FALSE)
+
+#Can create long format
+rain_long_used <- rain_long %>%
+  filter(station_id %in% used_stations)
+
+# Convert to cm
+rain_long_used_cm <- rain_long_cm %>%
+  filter(station_id %in% used_stations)
+
+
+```
+
+```{r}
+# Create 5 year averages for sampling sites and 
+# 5-year average by site code
+# Sampling Year windows: 
+# Year 2000 (do not have the previous 4 years so ommit this sampling year)
+# Year 2005: 2001-2005
+# Year 2010: 2006-2010
+# Year 2015: 2011-2015
+# Year 2023: 2016-2023 longer interval since data site sampling occurred in 2023 
+```
+
+```{r}
+#Testing 2005 Window: 2001-2005
+#Recreate annual rainfall by station using new dataset
+annual_rain_by_station <- rain_long_used_cm %>%
+  mutate(year = year(Date)) %>%
+  group_by(station_id, year) %>%
+  summarise(
+    annual_rainfall_cm = sum(rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#Recreate annual rainfall by site using new dataset
+annual_rain_by_site <- site_station_long %>%
+  left_join(annual_rain_by_station, by = "station_id", relationship = "many-to-many") %>%
+  group_by(site_code, year) %>%
+  summarise(
+    site_annual_rainfall_cm = mean(annual_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+```
+
+```{r}
+# 2005 year window
+
+site_rain_2005_window <- annual_rain_by_site %>%
+  filter(year %in% 2001:2005) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2005,
+     site_sample_window_avg_rainfall_cm = mean(site_annual_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+#Year 2010 Window: 2006-2010
+site_rain_2010_window <- annual_rain_by_site %>%
+  filter(year %in% 2006:2010) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2010,
+     site_sample_window_avg_rainfall_cm = mean(site_annual_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+#Year 2015 Window: 2011-2015
+site_rain_2015_window<- annual_rain_by_site %>%
+   filter(year %in% 2011:2015) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2015,
+     site_sample_window_avg_rainfall_cm = mean(site_annual_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+#Year 2023 Window: 2016-2023* 2020 site samp-ling occurred in 2023 therefore this is a 7 year window
+site_rain_2023_window <- annual_rain_by_site %>%
+  filter(year %in% 2016:2023) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2023,
+     site_sample_window_avg_rainfall_cm = mean(site_annual_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+#Combine site annual windows into one table
+site_annual_windows <- bind_rows(
+  site_rain_2005_window,
+  site_rain_2010_window,
+  site_rain_2015_window,
+  site_rain_2023_window
+)
+```
+
+```{r}
+#Save tables
+write.csv(site_rain_2005_window, "site_rain_2005_window.csv", row.names = FALSE)
+write.csv(site_rain_2010_window, "site_rain_2010_window.csv", row.names = FALSE)
+write.csv(site_rain_2015_window, "site_rain_2015_window.csv", row.names = FALSE)
+write.csv(site_rain_2023_window, "site_rain_2023_window.csv", row.names = FALSE)
+write.csv(site_annual_windows, "site_annual_windows.csv", row.names = FALSE)
+
+```
+
+```{r}
+# Calculating winter averages:
+# Winter rainfall data will be defined as October-April of the following year to look into the moisture period that could influence stinknet germination, establishment, and growth
+# Winter/growing-season rainfall year = October of the previous year through April of the focal year
+# Winter 2005 = October 2004–April 2005
+# Ommitting year 2000
+```
+
+```{r}
+# Workflow: 
+# Step 1. Calculate winter rainfall value for each site and year
+# Step 2. Average winter values across the same 5 windows windows for sites
+
+# Step 1a: add month and year
+rain_winter_prep <- rain_long_used_cm %>%
+  mutate(
+    month = month(Date),
+    year = year(Date)
+  )
+
+# Step 1b: keep only October-April
+rain_winter_months <- rain_winter_prep %>%
+  filter(month %in% c(10, 11, 12, 1, 2, 3, 4))
+
+# Step 1c: assign winter year
+rain_winter_months <- rain_winter_months %>%
+  mutate(
+    winter_year = ifelse(month %in% c(10, 11, 12), year + 1, year)
+  )
+
+# Step 1d: Remove year 2000
+rain_winter_months <- rain_winter_months %>%
+  filter(winter_year >= 2001)
+
+# Step 1e: sum winter rainfall by station and winter year
+winter_rain_by_station <- rain_winter_months %>%
+  group_by(station_id, winter_year) %>%
+  summarise(
+    winter_rainfall_cm = sum(rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+# Step 2. Calculate winter rainfall by site
+winter_rain_by_site <- site_station_long %>%
+  left_join(
+    winter_rain_by_station,
+    by = "station_id",
+    relationship = "many-to-many"
+  ) %>%
+  group_by(site_code, winter_year) %>%
+  summarise(
+    site_winter_rainfall_cm = mean(winter_rainfall_cm, na.rm = TRUE),
+    n_stations_used = n(),
+    .groups = "drop"
+  ) 
+
+# Check individual site
+winter_rain_by_site %>%
+  filter(site_code == "AA09")
+```
+
+```{r}
+# Step 2: Calculate winter year 5 year averages for sites
+```
+
+```{r}
+# Winter 2005 = 2001-2005
+site_winter_2005_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2001:2005) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2005,
+    site_winter_window_rainfall_cm = mean(site_winter_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+#Winter 2010 = 2006-2010
+site_winter_2010_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2006:2010) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2010,
+    site_winter_window_rainfall_cm = mean(site_winter_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+# Winter 2015 = 2011-2015
+site_winter_2015_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2011:2015) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2015,
+    site_winter_window_rainfall_cm = mean(site_winter_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+# Winter 2016 = 2016-2023
+## To adjust for delayed sampling of 2020 to 2023
+site_winter_2023_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2016:2023) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2023,
+    site_winter_window_rainfall_cm = mean(site_winter_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+```
+
+```{r}
+# Combine winter windows into one table
+site_winter_windows <- bind_rows(
+  site_winter_2005_window,
+  site_winter_2010_window,
+  site_winter_2015_window,
+  site_winter_2023_window
+)
+
+```
+
+```{r}
+# Export
+write.csv(site_winter_2005_window, "site_winter_2005_window.csv", row.names = FALSE)
+write.csv(site_winter_2010_window, "site_winter_2010_window.csv", row.names = FALSE)
+write.csv(site_winter_2015_window, "site_winter_2015_window.csv", row.names = FALSE)
+write.csv(site_winter_2023_window, "site_winter_2023_window.csv", row.names = FALSE)
+write.csv(site_winter_windows, "site_winter_windows.csv", row.names = FALSE)
+```
+
+```{r}
+# Wide format for winter 5-year averages
+site_winter_windows_wide <- site_winter_windows %>%
+  pivot_wider(
+    names_from = sample_year,
+    values_from = site_winter_window_rainfall_cm
+  ) %>%
+  arrange(site_code)
+
+#Save
+write.csv(site_winter_windows_wide, "site_winter_windows_wide.csv", row.names = FALSE)
+```
+
+```{r}
+#Wide format annual site
+
+site_annual_windows_wide <- site_annual_windows %>%
+  pivot_wider(
+    names_from = sample_year,
+    values_from = site_sample_window_avg_rainfall_cm
+  ) %>%
+  arrange(site_code)
+```
+
+```{r}
+# Next steps:
+# 1. Quality check window summaries
+# 2. Combine into ESCA database
+# 3. Start comparing rainfall against stinknet presence and land-use categories
+```
+
+```{r}
+# 1.Quality check window summaries for annual window and winter window averages
+##Check basic summaries
+
+# Annual Windows
+summary(site_annual_windows)
+colSums(is.na(site_annual_windows))
+
+# Winter Windows
+summary(site_winter_windows)
+colSums(is.na(site_winter_windows))
+
+
+# Step 2. Check wide tables
+# Annual window wide table
+summary(site_annual_windows_wide)
+
+
+
+# Winter window wide table
+summary(site_winter_windows_wide)
+
+
+# Step 3. Any missing windows
+# Annual windows
+site_annual_windows %>%
+  count(site_code) %>%
+  filter(n < 4)
+
+# Winter windows
+site_winter_windows %>%
+  count(site_code) %>%
+  filter(n < 4)
+
+
+# 4. Checking for outliers
+# Annual windows
+site_annual_windows %>%
+  arrange(desc(site_sample_window_avg_rainfall_cm))
+
+site_annual_windows %>%
+  arrange(site_sample_window_avg_rainfall_cm)
+
+# Winter windows
+
+site_winter_windows %>%
+  arrange(desc(site_winter_window_rainfall_cm))
+
+site_winter_windows %>%
+  arrange(site_winter_window_rainfall_cm)
+
+#Check with plots
+# Annual windows 
+## boxplot
+ggplot(site_annual_windows, aes(x = factor(sample_year), y = site_sample_window_avg_rainfall_cm)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Annual Rainfall by Sample Window",
+    x = "Sample year",
+    y = "Annual rainfall (cm)"
+  )
+
+# Winter windows
+## boxplot
+ggplot(site_winter_windows, aes(x = factor(sample_year), y = site_winter_window_rainfall_cm)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Winter Rainfall by Sample Window",
+    x = "Sample year",
+    y = "Winter rainfall (cm)"
+  )
+
+## Add histogram?
+```
+
+```{r}
+#| echo: true
+# Compare annual vs winter rainfall
+## Comparison of annual and winter rainfall window summaries show no cases where winter rainfall exceeded annual rainfall for the same site and sample year, suggesting the summaries are numerically consistent
+
+annual_winter_compare <- site_annual_windows %>%
+  left_join(site_winter_windows, by = c("site_code", "sample_year"))
+
+annual_winter_compare %>%
+  filter(site_winter_window_rainfall_cm > site_sample_window_avg_rainfall_cm)
+
+write.csv(annual_winter_compare, "annual_winter_compare.csv", row.names = FALSE)
+
+## Summaries by sample year
+# Annual window
+site_annual_windows %>%
+  group_by(sample_year) %>%
+  summarise(
+    min_rain = min(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    max_rain = max(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    mean_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    median_rain = median(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Winter window
+site_winter_windows %>%
+  group_by(sample_year) %>%
+  summarise(
+    min_rain = min(site_winter_window_rainfall_cm, na.rm = TRUE),
+    max_rain = max(site_winter_window_rainfall_cm, na.rm = TRUE),
+    mean_rain = mean(site_winter_window_rainfall_cm, na.rm = TRUE),
+    median_rain = median(site_winter_window_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+## Sites F12, G12, and H13 had essentaill no rainfall for October–April in the 2001–2005 winter windows, use the same station and n = 1
+
+# Filter to check rainfall in sample years
+winter_rain_by_site %>%
+    filter(site_code == "F12", winter_year %in% 2001:2005)
+
+#Annual rain by site and Winter rain by site: Sites AC22, F12, G12, and H13 were checked on online FCDMC database and had 0.00 recorded rainfall for those time periods
+summary(annual_rain_by_site)
+annual_rain_by_site %>% arrange(site_annual_rainfall_cm)
+annual_rain_by_site %>% arrange(desc(site_annual_rainfall_cm))
+
+
+summary(winter_rain_by_site)
+winter_rain_by_site %>% arrange(site_winter_rainfall_cm)
+winter_rain_by_site %>% arrange(desc(site_winter_rainfall_cm))
+
+```
+
+```{r}
+# 2. Combine into ESCA database
+# Start with buidling database (ESCA_2023) without sampling year 2000
+
+
+ESCA_sampling_data <- ESCA_2023 %>%
+  mutate(sample_year = year(sample_date)) %>%
+  filter(sample_year != 2000) %>%
+  select(
+    site_code,
+    sample_date,
+    sample_year,
+    ONCPIL,
+    elevation,
+    broad_classes,
+    detailed_classes,
+    specific_classes,
+    lu1912,
+    lu1912Broad,
+    clay,
+    sand,
+    silt,
+    ammonT,
+    ammonB,
+    nitrT,
+    nitrB,
+    phosT,
+    phosB,
+    ocarbT,
+    ocarbB,
+    somT,
+    somB,
+    pH,
+    conduct,
+    swcT,
+    swcB,
+    TnitT,
+    BnitT,
+    bulkdens,
+    cnT,
+    cnB,
+    species_richness
+  )
+```
+
+```{r}
+# Merge
+ESCA_rain_merged <- ESCA_sampling_data %>%
+  left_join(
+    annual_winter_compare,
+    by = c("site_code", "sample_year")
+  )
+
+ESCA_rain_merged <- ESCA_rain_merged %>%
+  relocate(
+    site_sample_window_avg_rainfall_cm,
+    site_winter_window_rainfall_cm,
+    .after = ONCPIL
+  )
+```
+
+```{r}
+write.csv(ESCA_rain_merged, "ESCA_rain_merged.csv", row.names = FALSE)
+write_xlsx(ESCA_rain_merged, "ESCA_rain_merged.xlsx")
+```
+
+```{r}
+#| echo: true
+# 3. Start comparing rainfall against stinknet presence and land-use categories
+## Simple mean and median annual and winter rain 
+ESCA_rain_merged %>%
+      group_by(sample_year, ONCPIL) %>%
+       summarise(
+           mean_annual_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+           median_annual_rain = median(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+           .groups = "drop"
+       )
+
+ESCA_rain_merged %>%
+      group_by(ONCPIL) %>%
+      summarise(
+          mean_annual_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+          median_annual_rain = median(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+          mean_winter_rain = mean(site_winter_window_rainfall_cm, na.rm = TRUE),
+          median_winter_rain = median(site_winter_window_rainfall_cm, na.rm = TRUE),
+          n = n(),
+          .groups = "drop"
+      )
+
+```
+
+```{r}
+#| echo: true
+# Annual Rainfall by Stinknet Presence
+ggplot(ESCA_rain_merged,
+       aes(x = factor(ONCPIL), y = site_sample_window_avg_rainfall_cm)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Annual Rainfall by Stinknet Presence",
+    x = "Stinknet Presence (ONCPIL)",
+    y = "Sample-window annual rainfall (cm)"
+  )
+
+# Winter Rainfall by Stinknet Presence
+ggplot(ESCA_rain_merged,
+       aes(x = factor(ONCPIL), y = site_winter_window_rainfall_cm)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Winter Rainfall by Stinknet Presence",
+    x = "Stinknet Presence (ONCPIL)",
+    y = "Sample-window winter rainfall (cm)"
+  )
+```
+
+```{r}
+#| echo: true
+# Mean Rain by Sample Year and Proportion Invaded
+
+rain_by_year <- ESCA_rain_merged %>%
+  group_by(sample_year) %>%
+  summarise(
+    mean_annual_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    mean_winter_rain = mean(site_winter_window_rainfall_cm, na.rm = TRUE),
+    prop_invaded = mean(ONCPIL, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+
+```
+
+```{r}
+# Annual rainfall by broad land use
+ggplot(ESCA_rain_merged,
+       aes(x = broad_classes, y = site_sample_window_avg_rainfall_cm)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Annual Rainfall by Broad Land-Use Category",
+    x = "Broad Land Use",
+    y = "Annual rainfall (cm)"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+
+# Winter rainfall by broad land use
+ggplot(ESCA_rain_merged,
+       aes(x = broad_classes, y = site_winter_window_rainfall_cm)) +
+  geom_boxplot() +
+  theme_minimal() +
+  labs(
+    title = "Winter Rainfall by Broad Land-Use Category",
+    x = "Broad Land Use",
+    y = "Winter rainfall (cm)"
+  ) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+
+```{r}
+# Annual vs Winter Rainfall by Site with Stinknet Presence
+#Same as next chunk
+ggplot(ESCA_rain_merged,
+       aes(x = site_sample_window_avg_rainfall_cm,
+           y = site_winter_window_rainfall_cm,
+           color = factor(ONCPIL))) +
+  geom_point(alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "Annual vs Winter Rainfall by Site",
+    x = "Annual rainfall (cm)",
+    y = "Winter rainfall (cm)",
+    color = "ONCPIL"
+  )
+
+
+# Annual Rainfall by Stinknet Presence Across Sample Years
+
+ggplot(
+  ESCA_rain_merged,
+  aes(
+    x = factor(ONCPIL, levels = c(FALSE, TRUE), labels = c("Absent", "Present")),
+    y = site_sample_window_avg_rainfall_cm,
+    color = factor(ONCPIL, levels = c(FALSE, TRUE), labels = c("Absent", "Present"))
+  )
+) +
+  geom_jitter(width = 0.15, alpha = 0.6, size = 2) +
+  facet_wrap(~ sample_year) +
+  theme_minimal() +
+  labs(
+    title = "Annual Rainfall by Stinknet Presence Across Sample Years",
+    x = "Stinknet Presence",
+    y = "Annual Rainfall (cm)",
+    color = "Stinknet Presence"
+  )
+
+
+# Winter Rainfall by Stinknet Presence Across Sample Years
+
+ggplot(
+  ESCA_rain_merged,
+  aes(
+    x = factor(ONCPIL, levels = c(FALSE, TRUE), labels = c("Absent", "Present")),
+    y = site_winter_window_rainfall_cm,
+    color = factor(ONCPIL, levels = c(FALSE, TRUE), labels = c("Absent", "Present"))
+  )
+) +
+  geom_jitter(width = 0.15, alpha = 0.6, size = 2) +
+  facet_wrap(~ sample_year) +
+  theme_minimal() +
+  labs(
+    title = "Winter Rainfall by Stinknet Presence Across Sample Years",
+    x = "Stinknet Presence",
+    y = "Winter Rainfall (cm)",
+    color = "Stinknet Presence"
+  )
+
+
+# Mean Annual Rainfall by Stinknet Presence Across Sample Years, mean ± SE plot
+annual_summary_plot <- ESCA_rain_merged %>%
+  group_by(sample_year, ONCPIL) %>%
+  summarise(
+    mean_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    se_rain = sd(site_sample_window_avg_rainfall_cm, na.rm = TRUE) / sqrt(n()),
+    .groups = "drop"
+  )
+
+ggplot(
+  annual_summary_plot,
+  aes(
+    x = factor(ONCPIL, levels = c(FALSE, TRUE), labels = c("Absent", "Present")),
+    y = mean_rain,
+    color = factor(ONCPIL, levels = c(FALSE, TRUE), labels = c("Absent", "Present"))
+  )
+) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean_rain - se_rain, ymax = mean_rain + se_rain), width = 0.15) +
+  facet_wrap(~ sample_year) +
+  theme_minimal() +
+  labs(
+    title = "Mean Annual Rainfall by Stinknet Presence Across Sample Years",
+    x = "Stinknet Presence",
+    y = "Mean Annual Rainfall (cm)",
+    color = "Stinknet Presence"
+  ) +
+  theme(legend.position = "none")
+
+```
+
+```{r}
+# Individual Sites? Averages? Distribution?
+
+#Scatterplot Annual vs. Winter Rainfall by Site
+ggplot(ESCA_rain_merged,
+       aes(x = site_sample_window_avg_rainfall_cm,
+           y = site_winter_window_rainfall_cm,
+           color = factor(ONCPIL))) +
+  geom_point(alpha = 0.7) +
+  theme_minimal() +
+  labs(
+    title = "Annual vs Winter Rainfall by Site",
+    x = "Annual rainfall (cm)",
+    y = "Winter rainfall (cm)",
+    color = "ONCPIL"
+  )
+```
+
+```{r}
+# Selected Sites Example for Rainfall Across Sample Windows (AA09, AA11, F12, G12)
+# Annual 
+selected_sites <- c("AA09", "AA11", "F12", "G12")
+
+site_annual_windows %>%
+  filter(site_code %in% selected_sites) %>%
+  ggplot(
+    aes(
+      x = sample_year,
+      y = site_sample_window_avg_rainfall_cm,
+      group = site_code,
+      color = site_code
+    )
+  ) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    title = "Annual Rainfall Across Sample Windows for Selected Sites",
+    x = "Sample Year",
+    y = "Annual Rainfall (cm)",
+    color = "Site Code"
+  )
+
+
+# Winter
+site_winter_windows %>%
+  filter(site_code %in% selected_sites) %>%
+  ggplot(
+    aes(
+      x = sample_year,
+      y = site_winter_window_rainfall_cm,
+      group = site_code,
+      color = site_code
+    )
+  ) +
+  geom_line() +
+  geom_point() +
+  theme_minimal() +
+  labs(
+    title = "Winter Rainfall Across Sample Windows for Selected Sites",
+    x = "Sample Year",
+    y = "Winter Rainfall (cm)",
+    color = "Site Code"
+  )
+```
+
+```{r}
+# 4-site set:
+# high rainfall and stinknet presence
+# high rainfall and stinknet absent
+# low rainfall and stinknet presence
+# low rainfall and stinknet absence
+# ranking the sites by their rainfall summary/values not statistical cutoffs
+
+# 1. Build a site-level summary
+# take mean of the site’s sample-window rainfall average
+site_selection_summary <- ESCA_rain_merged %>%
+  group_by(site_code) %>%
+  summarise(
+    mean_annual_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    mean_winter_rain = mean(site_winter_window_rainfall_cm, na.rm = TRUE),
+    ever_present = max(ONCPIL, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+site_selection_summary %>%
+  arrange(mean_annual_rain)
+
+
+site_selection_summary %>%
+  arrange(desc(mean_annual_rain))
+
+# Creating candidate sites
+high_rain_present <- site_selection_summary %>%
+  filter(ever_present == 1) %>%
+  arrange(desc(mean_annual_rain))
+
+high_rain_absent <- site_selection_summary %>%
+  filter(ever_present == 0) %>%
+  arrange(desc(mean_annual_rain))
+
+low_rain_present <- site_selection_summary %>%
+  filter(ever_present == 1) %>%
+  arrange(mean_annual_rain)
+
+low_rain_absent <- site_selection_summary %>%
+  filter(ever_present == 0) %>%
+  arrange(mean_annual_rain)
+
+candidate_sites_combined <- bind_rows(
+  high_rain_present %>% mutate(candidate_group = "high_rain_present"),
+  high_rain_absent  %>% mutate(candidate_group = "high_rain_absent"),
+  low_rain_present  %>% mutate(candidate_group = "low_rain_present"),
+  low_rain_absent   %>% mutate(candidate_group = "low_rain_absent")
+)
+ESCA_rain_merged %>%
+  group_by(ONCPIL) %>%
+  summarise(
+    n = n(),
+    mean_annual_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    median_annual_rain = median(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    sd_annual_rain = sd(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+#Save
+write.csv(high_rain_present, "high_rain_present.csv", row.names = FALSE)
+write.csv(high_rain_absent, "high_rain_absent.csv", row.names = FALSE)
+write.csv(low_rain_present, "low_rain_present.csv", row.names = FALSE)
+write.csv(low_rain_absent, "low_rain_absent.csv", row.names = FALSE)
+write.csv(candidate_sites_combined, "candidate_sites_combined.csv", row.names = FALSE)
+```
+
+```{r}
+#| echo: true
+# Analysis
+# Wilcox test
+# Annual Window Average Rainfall
+wilcox.test(site_sample_window_avg_rainfall_cm ~ ONCPIL, data = ESCA_rain_merged)
+
+
+##suggests that annual rainfall differs significantly between stinknet present and absent sites at the usual alpha = 0.05 level. There is evidence that the distribution of annual rainfall is not the same for the two groups.
+
+# Winter Window Average Rainfall
+wilcox.test(site_winter_window_rainfall_cm ~ ONCPIL, data = ESCA_rain_merged)
+
+
+## winter rainfall does not differ significantly between stinknet present and absent sites in this dataset, at least based on this Wilcoxon test. There is no strong evidence of a difference between the two groups.
+
+## Check means
+```
+
+```{r}
+# Logistic regression with rainfall + land use
+glm_annual_landuse <- glm(
+  ONCPIL ~ site_sample_window_avg_rainfall_cm + broad_classes,
+  data = ESCA_rain_merged,
+  family = binomial
+)
+
+summary(glm_annual_landuse)
+
+# Winter
+glm_winter_landuse <- glm(
+  ONCPIL ~ site_winter_window_rainfall_cm + broad_classes,
+  data = ESCA_rain_merged,
+  family = binomial
+)
+
+summary(glm_winter_landuse)
+
+#Both
+glm_full_simple <- glm(
+  ONCPIL ~ site_sample_window_avg_rainfall_cm + site_winter_window_rainfall_cm + broad_classes,
+  data = ESCA_rain_merged,
+  family = binomial
+)
+
+View(summary(glm_full_simple))
+
+```
+
+```{}
+```
+
+```{r}
+#Annual summary by year and presence
+ESCA_rain_merged %>%
+  group_by(sample_year, ONCPIL) %>%
+  summarise(
+    mean_annual_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    median_annual_rain = median(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+
+#Winter summary by year and presence
+ESCA_rain_merged %>%
+  group_by(sample_year, ONCPIL) %>%
+  summarise(
+    mean_winter_rain = mean(site_winter_window_rainfall_cm, na.rm = TRUE),
+    median_winter_rain = median(site_winter_window_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
+
+```{r}
+#Rainfall summaries by ONCPIL within broad land-use category
+ESCA_rain_merged %>%
+  group_by(broad_classes, ONCPIL) %>%
+  summarise(
+    n = n(),
+    mean_annual_rain = mean(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    median_annual_rain = median(site_sample_window_avg_rainfall_cm, na.rm = TRUE),
+    mean_winter_rain = mean(site_winter_window_rainfall_cm, na.rm = TRUE),
+    median_winter_rain = median(site_winter_window_rainfall_cm, na.rm = TRUE),
+    .groups = "drop"
+  )
+```
