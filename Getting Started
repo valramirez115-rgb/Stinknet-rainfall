@@ -3,7 +3,6 @@ title: "Getting Started with Rainfall"
 author: Valerie Ramirez 
 ---
 
-## Quarto
 ```
 
 ```{r}
@@ -17,7 +16,6 @@ library(ggplot2)
 ```
 
 ```{r}
-#| echo: true
 
 #Import ESCA database, use most updated with 2023 land use updates
 ESCA_2023<- read_excel("VR_DB_ESCA_2023LU_elevation.xlsx")
