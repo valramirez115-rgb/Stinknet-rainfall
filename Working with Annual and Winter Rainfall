@@ -395,7 +395,6 @@ colSums(is.na(site_winter_windows))
 summary(site_annual_windows_wide)
 
 
-
 # Winter window wide table
 summary(site_winter_windows_wide)
 
@@ -451,7 +450,6 @@ ggplot(site_winter_windows, aes(x = factor(sample_year), y = site_winter_window_
     y = "Winter rainfall (cm)"
   )
 
-## Add histogram?
 ```
 
 ```{r}
