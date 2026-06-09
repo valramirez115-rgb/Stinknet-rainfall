@@ -18,6 +18,10 @@ library(ggplot2)
 
 ```{r}
 #| echo: true
+
+#Import ESCA database, use most updated with 2023 land use updates
+ESCA_2023<- read_excel("VR_DB_ESCA_2023LU_elevation.xlsx")
+
 #Load most recent, cleaned rainfall data 
 updated_rainfall <- read_excel("Vr_Copy of Cleaned_Rainfall (Official).xlsx")
 
@@ -61,23 +65,23 @@ sum(is.na(updated_rainfall))
 ```
 
 ```{r}
-#Converting rainfall from inches to centimeters
+#Converting rainfall data from inches to centimeters
 ##Keep orignal long format table and create new tables for long format in centimeters
+
 rain_long_cm <- rain_long %>%
   mutate(rainfall_cm = rainfall * 2.54) %>%
   select(Date, station_id, rainfall_cm)
 
 #Transforming original wide rainfall data (updated_rainfall) to cm (rain_clean_cm)
+
 rain_clean_cm <- updated_rainfall %>%
   mutate(across(-Date, ~ .x * 2.54))
 
 ```
 
 ```{r}
-# Correct number of NAS
-#Wide cleaned table already exists as rain_clean
+# Check for correct number of NAs
 
-# Check NA count in rainfall cells only
 sum(is.na(updated_rainfall[, -1]))
 
 # Rebuild long table from current cleaned wide table
@@ -94,19 +98,16 @@ rain_long_cm <- rain_long %>%
   mutate(rainfall_cm = rainfall * 2.54) %>%
   select(Date, station_id, rainfall_cm)
 
-# Recheck counts
+# Recheck NA counts
 sum(is.na(rain_long$rainfall))
 sum(is.na(rain_long_cm$rainfall_cm))
 ```
 
 ```{r}
-# A separate site lookup table was created to link ESCA site codes with their associated FCDMC rain station IDs. The lookup table is standalone table for cross-referencing between the ESCA and rainfall datasets
-#Adding look-up table with ESCA site codes and fcdmc station IDs
-##Make sure X13 is corrected (from S13 to X13) before importing
-##Make sure V14 is corrected, only has 2 stations and V15 has 2
-##Make sure U17 and U18 site codes are ommitted
-##Make sure V17 site codes are ommitted from look up table
-##Make sure for site code AE07, rain station 50827 is deleted
+# Adding look-up table with ESCA site codes and FCDMC station IDs
+# A separate site lookup table was created to link ESCA site codes with their associated FCDMC rain station IDs.
+# The lookup table is standalone table for cross-referencing between the ESCA and rainfall datasets
+
 site_station_lookup_raw <- read_excel("Site_LookUp_Table.xlsx")
 
 #Inspect
@@ -122,7 +123,7 @@ site_station_lookup_raw <- site_station_lookup_raw %>%
   )
 
 #Change format to one row per ESCA site code and rename to match ESCA database site_code column
-##If site only has one fcdmc station it will be listed as NA
+## If site only has one FCDMC station, station 2 will be listed as NA
 
 site_station_lookup <- site_station_lookup_raw %>%
   group_by(ESCA_site_code) %>%
@@ -136,13 +137,10 @@ site_station_lookup <- site_station_lookup_raw %>%
   ungroup() %>%
   rename(site_code = ESCA_site_code)
 
-#Import ESCA database, use most updated with 2023 land use updates
-ESCA_2023<- read_excel("VR_DB_ESCA_2023LU_elevation.xlsx")
-
 #Check site codes that are in ESCA_2023 and site_station_lookup, should be 201
 sum(site_station_lookup$site_code %in% ESCA_2023$site_code)
 
-#Find any unmatched site codes to make sure
+#Find any unmatched site codes to make sure site codes match in both datasets
 site_station_lookup %>%
   filter(!site_code %in% ESCA_2023$site_code)
 
@@ -150,7 +148,7 @@ site_station_lookup %>%
 ```
 
 ```{r}
-#Convert lookup table to long format
+# Convert lookup table to long format
 site_station_long <- site_station_lookup %>%
   pivot_longer(
     cols = c(station1, station2),
@@ -161,6 +159,7 @@ site_station_long <- site_station_lookup %>%
   mutate(station_id = as.character(station_id))
 
 ```
+## PART 2
 
 ```{r}
 # Create annual rainfall totals for each station
