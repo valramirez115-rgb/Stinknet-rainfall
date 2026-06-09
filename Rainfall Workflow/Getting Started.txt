@@ -1,0 +1,159 @@
+---
+title: "Getting Started with Rainfall"
+author: Valerie Ramirez 
+---
+
+```
+
+```{r}
+#Load Libraries
+library(readxl)
+library(writexl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+```
+
+```{r}
+
+#Import ESCA database, use most updated with 2023 land use updates
+ESCA_2023<- read_excel("VR_DB_ESCA_2023LU_elevation.xlsx")
+
+#Load most recent, cleaned rainfall data 
+updated_rainfall <- read_excel("Vr_Copy of Cleaned_Rainfall (Official).xlsx")
+
+#Inspect structure
+names(updated_rainfall)
+head(updated_rainfall)
+str(updated_rainfall)
+
+#Remove trailing .00s from from station column names
+names(updated_rainfall) <- sub("\\.0$", "", names(updated_rainfall))
+
+# Convert Date to Date format and to numeric
+updated_rainfall <- updated_rainfall %>%
+  mutate(
+    across(-Date, ~ as.numeric(trimws(as.character(.x))))
+  ) %>%
+  mutate(Date = as.Date(Date))
+
+# Convert wide to long format
+rain_long <- updated_rainfall %>%
+  pivot_longer(
+    cols = -Date,
+    names_to = "station_id",
+    values_to = "rainfall"
+  ) %>%
+  mutate(
+    station_id = as.character(station_id)
+  )
+
+# Check result, should be columns:192 and rows: 9,497
+glimpse(updated_rainfall)
+glimpse(rain_long)
+summary(rain_long$rainfall)
+
+#Check number of NAs, should be 195371
+sum(is.na(updated_rainfall))
+
+```
+
+```         
+```
+
+```{r}
+#Converting rainfall data from inches to centimeters
+##Keep orignal long format table and create new tables for long format in centimeters
+
+rain_long_cm <- rain_long %>%
+  mutate(rainfall_cm = rainfall * 2.54) %>%
+  select(Date, station_id, rainfall_cm)
+
+#Transforming original wide rainfall data (updated_rainfall) to cm (rain_clean_cm)
+
+rain_clean_cm <- updated_rainfall %>%
+  mutate(across(-Date, ~ .x * 2.54))
+
+```
+
+```{r}
+# Check for correct number of NAs
+
+sum(is.na(updated_rainfall[, -1]))
+
+# Rebuild long table from current cleaned wide table
+rain_long <- updated_rainfall %>%
+  pivot_longer(
+    cols = -Date,
+    names_to = "station_id",
+    values_to = "rainfall"
+  ) %>%
+  mutate(station_id = as.character(station_id))
+
+# Rebuild cm table from current long table
+rain_long_cm <- rain_long %>%
+  mutate(rainfall_cm = rainfall * 2.54) %>%
+  select(Date, station_id, rainfall_cm)
+
+# Recheck NA counts
+sum(is.na(rain_long$rainfall))
+sum(is.na(rain_long_cm$rainfall_cm))
+```
+
+```{r}
+# Adding look-up table with ESCA site codes and FCDMC station IDs
+# A separate site lookup table was created to link ESCA site codes with their associated FCDMC rain station IDs.
+# The lookup table is standalone table for cross-referencing between the ESCA and rainfall datasets
+
+site_station_lookup_raw <- read_excel("Site_LookUp_Table.xlsx")
+
+#Inspect
+names(site_station_lookup_raw)
+head(site_station_lookup_raw)
+str(site_station_lookup_raw)
+
+#Change both to characters
+site_station_lookup_raw <- site_station_lookup_raw %>%
+  mutate(
+    ESCA_site_code = as.character(ESCA_site_code),
+    fcdmc_station_id = as.character(fcdmc_station_id)
+  )
+
+#Change format to one row per ESCA site code and rename to match ESCA database site_code column
+## If site only has one FCDMC station, station 2 will be listed as NA
+
+site_station_lookup <- site_station_lookup_raw %>%
+  group_by(ESCA_site_code) %>%
+  mutate(station_num = row_number()) %>%
+  pivot_wider(
+    names_from = station_num,
+    values_from = fcdmc_station_id,
+    names_prefix = "station"
+  ) %>%
+  distinct() %>%
+  ungroup() %>%
+  rename(site_code = ESCA_site_code)
+
+#Check site codes that are in ESCA_2023 and site_station_lookup, should be 201
+sum(site_station_lookup$site_code %in% ESCA_2023$site_code)
+
+#Find any unmatched site codes to make sure site codes match in both datasets
+site_station_lookup %>%
+  filter(!site_code %in% ESCA_2023$site_code)
+
+
+```
+
+```{r}
+# Convert lookup table to long format
+site_station_long <- site_station_lookup %>%
+  pivot_longer(
+    cols = c(station1, station2),
+    names_to = "station_label",
+    values_to = "station_id"
+  ) %>%
+  filter(!is.na(station_id)) %>%
+  mutate(station_id = as.character(station_id))
+
+```
