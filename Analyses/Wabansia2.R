@@ -1,0 +1,332 @@
+## # Stinknet Analyses by Valerie Ramirez
+## Part 2: Workflow for creating multi-year averages for each sample date for 
+# sample sites. All average windows span 5 years except the last sampling 
+# period (2023: 2016-2023). 
+# 3 different sampling window averages are calculated:
+# Annual rain sampling-period average: average annual rainfall over the years between sampling periods.
+# Winter rain sampling-period average: average of the Oct–Feb winter-season totals over the years between sampling periods.
+# Recent winter rainfall: only the Oct–Feb season immediately preceding that particular sampling year.
+# Load: 
+
+# Load Libraries
+library(readxl)
+library(writexl)
+library(dplyr)
+library(tidyr)
+library(lubridate)
+library(ggplot2)
+library(bannerCommenter)
+
+##------------------------------------------------
+# Workflow for Site-year rainfall averages
+# Sampling Year Windows: 
+# Year 2005: 2001-2005
+# Year 2010: 2006-2010
+# Year 2015: 2011-2015
+# Year 2023: 2016-2023 
+# Testing with Summaries
+##-----------------------------------------------
+
+###------------------------------------------------
+# Calculating Annual Multi-Year Rainfall Averages
+# daily rainfall -> station annual totals -> site annual totals (site_year_rain) 
+# -> 5-year site averages
+# Starting 5-year-window workflow directly from site_year_rain
+# Variables will be called site_annual_rain_(followed by sampling year period)_window
+###------------------------------------------------
+
+# 2005 sampling window: 2001-2005
+site_annual_rain_2005_window <- site_year_rain %>%
+  filter(year %in% 2001:2005) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2005,
+    site_sample_window_avg_rainfall_cm = if_else(
+      all(is.na(site_annual_rainfall_cm)),
+      NA_real_,
+      mean(site_annual_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# 2010 sampling window: 2006-2010
+site_annual_rain_2010_window <- site_year_rain %>%
+  filter(year %in% 2006:2010) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2010,
+    site_sample_window_avg_rainfall_cm = if_else(
+      all(is.na(site_annual_rainfall_cm)),
+      NA_real_,
+      mean(site_annual_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# 2015 sampling window: 2011-2015
+site_annual_rain_2015_window <- site_year_rain %>%
+  filter(year %in% 2011:2015) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2015,
+    site_sample_window_avg_rainfall_cm = if_else(
+      all(is.na(site_annual_rainfall_cm)),
+      NA_real_,
+      mean(site_annual_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# 2023 sampling window: 2016-2023
+site_annual_rain_2023_window <- site_year_rain %>%
+  filter(year %in% 2016:2023) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2023,
+    site_sample_window_avg_rainfall_cm = if_else(
+      all(is.na(site_annual_rainfall_cm)),
+      NA_real_,
+      mean(site_annual_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+##Combine site annual windows into one table
+combined_site_annual_windows <- bind_rows(
+  site_annual_rain_2005_window,
+  site_annual_rain_2010_window,
+  site_annual_rain_2015_window,
+  site_annual_rain_2023_window
+)
+write.csv(combined_site_annual_windows, 
+          "combined_site_annual_windows.csv", 
+          row.names = FALSE)
+
+# Wide format
+combined_site_annual_windows_wide <- combined_site_annual_windows %>%
+  pivot_wider(
+    names_from = sample_year,
+    values_from = site_sample_window_avg_rainfall_cm
+  ) %>%
+  arrange(site_code)
+
+
+write.csv(combined_site_annual_windows_wide, 
+          "combined_site_annual_windows_wide.csv", 
+          row.names = FALSE)
+
+###------------------------------------------------
+# Calculating Winter Multi-Year Rainfall Averages
+# daily rainfall -> Oct–Feb winter total by station -> winter total by site ->
+# multi-year winter average matched to each sampling period
+###------------------------------------------------
+
+# Winter rainfall is defined as October-February.
+# Each winter is assigned to the year in which January-February occur
+# Example: winter_year 2005 = October 2004 through February 2005
+
+# Winter year 2000 is omitted because the rainfall dataset does not
+# contain the preceding October-December 1999 period
+
+# Sampling-period winter windows:
+# 2005 sample year = winter years 2001-2005
+# 2010 sample year = winter years 2006-2010
+# 2015 sample year = winter years 2011-2015
+# 2023 sample year = winter years 2016-2023
+
+# Step 1: new dataframe with winter months rain data (month and year)
+rain_winter_prep <- rain_long_used_cm %>%
+  mutate(
+    month = month(Date),
+    year = year(Date)
+  )
+
+# Step 2: keep only October-February
+rain_winter_months <- rain_winter_prep %>%
+  filter(month %in% c(10, 11, 12, 1, 2))
+
+# Step 3: assign winter year
+rain_winter_months <- rain_winter_months %>%
+  mutate(
+    winter_year = ifelse(
+      month %in% c(10, 11, 12),
+      year + 1,
+      year
+    )
+  )
+
+# Step 4: remove year 2000
+rain_winter_months <- rain_winter_months %>%
+  filter(winter_year >= 2001)
+
+# Step 5: calculate winter rainfall by station
+winter_rain_by_station <- rain_winter_months %>%
+  group_by(station_id, winter_year) %>%
+  summarise(
+    winter_rainfall_cm = if_else(
+      all(is.na(rainfall_cm)),
+      NA_real_,
+      sum(rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# Step 6: Calculate winter rainfall by sample site
+winter_rain_by_site <- site_station_long %>%
+  left_join(
+    winter_rain_by_station,
+    by = "station_id",
+    relationship = "many-to-many"
+  ) %>%
+  group_by(site_code, winter_year) %>%
+  summarise(
+    site_winter_rainfall_cm = if_else(
+      all(is.na(winter_rainfall_cm)),
+      NA_real_,
+      mean(winter_rainfall_cm, na.rm = TRUE)
+    ),
+    n_stations_used = sum(!is.na(winter_rainfall_cm)),
+    .groups = "drop"
+  )
+
+# Check an individual sample site
+winter_rain_by_site %>%
+  filter(site_code == "AA09")
+
+winter_rain_by_site %>% 
+  filter(site_code == "F12")
+
+# Next step: calculating the multi-year averages from winter_rain_by_site
+# takes each site's winter totals for winter years 2006, 2007, 2008, 2009,
+# and 2010 and averages them.
+# 2005 sampling window: winter years 2001-2005
+site_winter_2005_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2001:2005) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2005,
+    site_winter_window_rainfall_cm = if_else(
+      all(is.na(site_winter_rainfall_cm)),
+      NA_real_,
+      mean(site_winter_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# 2010 sampling window: winter years 2006-2010
+site_winter_2010_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2006:2010) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2010,
+    site_winter_window_rainfall_cm = if_else(
+      all(is.na(site_winter_rainfall_cm)),
+      NA_real_,
+      mean(site_winter_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# Winter 2015 sampling window = winter years 2011-2015
+site_winter_2015_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2011:2015) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2015,
+    site_winter_window_rainfall_cm = if_else(
+      all(is.na(site_winter_rainfall_cm)),
+      NA_real_,
+      mean(site_winter_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# Winter 2023 sampling window = winter years 2016-2023
+# This winter window is extended to account for delayed sampling from 2020 to 
+# 2023
+site_winter_2023_window <- winter_rain_by_site %>%
+  filter(winter_year %in% 2016:2023) %>%
+  group_by(site_code) %>%
+  summarise(
+    sample_year = 2023,
+    site_winter_window_rainfall_cm = if_else(
+      all(is.na(site_winter_rainfall_cm)),
+      NA_real_,
+      mean(site_winter_rainfall_cm, na.rm = TRUE)
+    ),
+    .groups = "drop"
+  )
+
+# Combine winter rain mulit-year average windows into one table
+combined_site_winter_windows <- bind_rows(
+  site_winter_2005_window,
+  site_winter_2010_window,
+  site_winter_2015_window,
+  site_winter_2023_window
+)
+write.csv(combined_site_winter_windows, "combined_site_winter_windows.csv", row.names = FALSE)
+
+# Wide format for winter rain multi-year averages
+combined_site_winter_windows_wide <- combined_site_winter_windows %>%
+  pivot_wider(
+    names_from = sample_year,
+    values_from = site_winter_window_rainfall_cm
+  ) %>%
+  arrange(site_code)
+
+
+# Export
+write.csv(combined_site_winter_windows_wide, "combined_site_winter_windows_wide.csv", row.names = FALSE)
+
+###------------------------------------------------
+# Calculating Recent Winter Rainfall Averages
+# Recent winter rainfall: only the Oct–Feb season immediately preceding that
+# particular sampling year
+# winter_year 2005 = Oct 2004–Feb 2005 -> sample year 2005
+# winter_year 2010 = Oct 2009–Feb 2010 -> sample year 2010
+# winter_year 2015 = Oct 2014–Feb 2015 -> sample year 2015
+# winter_year 2023 = Oct 2022–Feb 2023 -> sample year 2023
+###------------------------------------------------
+
+# Step 1: Calculating recent winter rainfall averages using winter_rain_by_site
+recent_winter_rain <- winter_rain_by_site %>%
+  filter(winter_year %in% c(2005, 2010, 2015, 2023)) %>%
+  mutate(
+    sample_year = winter_year
+  ) %>%
+  select(
+    site_code,
+    sample_year,
+    recent_year_rainfall_cm = site_winter_rainfall_cm
+  )
+
+# Wide format
+recent_winter_rain_wide <- recent_winter_rain %>%
+  select(
+    site_code,
+    sample_year,
+    recent_year_rainfall_cm
+  ) %>%
+  pivot_wider(
+    names_from = sample_year,
+    values_from = recent_year_rainfall_cm,
+    names_prefix = "recent_winter_"
+  )
+
+# Check summaries
+# Recent Winter Period Average Rainfall
+summary(recent_winter_rain_wide)
+colSums(is.na(recent_winter_rain_wide)) 
+
+# Export
+write.csv(recent_winter_rain, "recent_winter_rain.csv", row.names = FALSE)
+
+
+
+
+
+##------------------------------------------------
+# Next part: 
+# Quality Check the 3 rainfall periods
+# Graphs, Comparing rainfall
+#
+##-----------------------------------------------
