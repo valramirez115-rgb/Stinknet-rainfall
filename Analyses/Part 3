@@ -1,6 +1,6 @@
 # Stinknet Analyses by Valerie Ramirez
-# Part 3: Workflow for Quality Checks, Combining ESCA and rain average, graphs, 
-# and other Visualizations
+# Part 3: Workflow for quality checks, combining ESCA and rain average, graphs, 
+# and other visualizations
 
 # Load Libraries
 library(readxl)
