@@ -327,6 +327,6 @@ write.csv(recent_winter_rain, "recent_winter_rain.csv", row.names = FALSE)
 ##------------------------------------------------
 # Next part: 
 # Quality Check the 3 rainfall periods
-# Graphs, Comparing rainfall
+# Graphs and comparing rainfall
 #
 ##-----------------------------------------------
