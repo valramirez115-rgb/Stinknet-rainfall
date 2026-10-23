@@ -81,7 +81,7 @@ sample_periods_rain_by_year
 ## Removing samples with NA land-use categories
 ##-----------------------------------------------
 
-# boxplots summarize the distribution of the rainfall values already in your dataframe for each land-use category.
+# boxplots summarize the distribution of the rainfall values already in the dataframe for each land-use category.
 # Annual Rainfall Sampling Period
 ggplot(
   ESCA_rain_merged %>%
