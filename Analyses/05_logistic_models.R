@@ -19,9 +19,6 @@ library(gt)
 library(gtsummary)
 
 
-# Looking at the 3 different periods > choosing best model fit > further analyses
-# that better represents stinknet growth
-
 # ==============================================================================
 # WORKFLOW: 
 # 3 models for the three rainfall periods and compare AIC
